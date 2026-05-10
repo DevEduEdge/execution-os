@@ -39,12 +39,17 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
   const [reality, setReality] = useState<RealityDashboardDto | null>(null);
   const [focusTask, setFocusTask] = useState<TaskDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [sectionBusy, setSectionBusy] = useState<Record<NavSection, boolean>>({
+    dashboard: false,
+    today: false,
+    money: false,
+    growth: false
+  });
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (silent = false) => {
     setError(null);
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const currentProfile = await api.session();
       const [todayTasks, moneySummary, habitSummary, realitySummary, decisionHistory] = await Promise.all([
@@ -65,7 +70,7 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to load Execution OS.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [api]);
 
@@ -73,36 +78,71 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
     void refresh();
   }, [refresh]);
 
-  const runAction = async (action: () => Promise<void>) => {
-    setBusy(true);
+  const runAction = async (section: NavSection, action: () => Promise<void>, optimistic?: () => void) => {
+    setSectionBusy((prev) => ({ ...prev, [section]: true }));
     setError(null);
     try {
+      if (optimistic) optimistic();
       await action();
-      await refresh();
+      void refresh(true);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "Action failed.");
+      await refresh(true);
     } finally {
-      setBusy(false);
+      setSectionBusy((prev) => ({ ...prev, [section]: false }));
     }
   };
 
   const handleFocus = (task: TaskDto) =>
-    runAction(async () => {
+    runAction("today", async () => {
       const focused = await api.focusTask(task.id);
       setFocusTask(focused);
     });
 
   const handleComplete = (task: TaskDto) =>
-    runAction(async () => {
-      await api.completeTask(task.id);
-      setFocusTask(null);
-    });
+    runAction(
+      "today",
+      async () => {
+        await api.completeTask(task.id);
+        setFocusTask(null);
+      },
+      () => {
+        setTasks((prev) => prev.filter((item) => item.id !== task.id));
+        setTaskHistory((prev) => [{ ...task, status: "completed", completedAt: new Date().toISOString() }, ...prev]);
+        setReality((prev) =>
+          prev
+            ? {
+                ...prev,
+                tasksCompleted: prev.tasksCompleted + 1,
+                points: prev.points + task.points
+              }
+            : prev
+        );
+      }
+    );
 
   const handleSkip = (task: TaskDto) =>
-    runAction(async () => {
-      await api.skipTask(task.id);
-      setFocusTask(null);
-    });
+    runAction(
+      "today",
+      async () => {
+        await api.skipTask(task.id);
+        setFocusTask(null);
+      },
+      () => {
+        const penalty = Math.max(5, Math.round(task.points * 0.7));
+        setTasks((prev) => prev.filter((item) => item.id !== task.id));
+        setTaskHistory((prev) => [{ ...task, status: "skipped", skippedAt: new Date().toISOString() }, ...prev]);
+        setReality((prev) =>
+          prev
+            ? {
+                ...prev,
+                daysWasted: prev.daysWasted + 1,
+                points: Math.max(0, prev.points - penalty)
+              }
+            : prev
+        );
+      }
+    );
 
   return (
     <main className="screen">
@@ -133,7 +173,7 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
 
       {!loading && active === "today" && reality ? (
         <CommandCenter
-          busy={busy}
+          busy={sectionBusy.today}
           profile={profile}
           reality={reality}
           tasks={tasks}
@@ -142,19 +182,35 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
           onFocus={handleFocus}
           onSkip={handleSkip}
           onAddTask={(input) =>
-            runAction(async () => {
+            runAction("today", async () => {
               await api.addTask(input);
             })
           }
           onUndoTask={(task) =>
-            runAction(async () => {
-              await api.undoTask(task.id);
-            })
+            runAction(
+              "today",
+              async () => {
+                await api.undoTask(task.id);
+              },
+              () => {
+                setTaskHistory((prev) => prev.filter((item) => item.id !== task.id));
+                setTasks((prev) =>
+                  [{ ...task, status: "pending" as const, completedAt: undefined, skippedAt: undefined }, ...prev].slice(0, 3)
+                );
+              }
+            )
           }
           onDeleteTask={(task) =>
-            runAction(async () => {
-              await api.deleteTask(task.id);
-            })
+            runAction(
+              "today",
+              async () => {
+                await api.deleteTask(task.id);
+              },
+              () => {
+                setTaskHistory((prev) => prev.filter((item) => item.id !== task.id));
+                setTasks((prev) => prev.filter((item) => item.id !== task.id));
+              }
+            )
           }
         />
       ) : null}
@@ -165,22 +221,70 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
 
       {!loading && active === "money" && money ? (
         <MoneyTracker
-          busy={busy}
+          busy={sectionBusy.money}
           money={money}
           onAddExpense={(input) =>
-            runAction(async () => {
-              await api.addExpense(input);
-            })
+            runAction(
+              "money",
+              async () => {
+                await api.addExpense(input);
+              },
+              () => {
+                setMoney((prev) => {
+                  if (!prev) return prev;
+                  const amount = input.amount;
+                  const nowIso = new Date().toISOString();
+                  const recent = [
+                    { id: `tmp-${Date.now()}`, amount, note: input.note, category: input.category, kind: input.kind, spentAt: nowIso },
+                    ...prev.recentExpenses
+                  ].slice(0, 5);
+                  const next = { ...prev, recentExpenses: recent };
+                  if (input.kind === "income") {
+                    next.dailyIncome += amount;
+                    next.monthlyIncome += amount;
+                    next.monthlyNet += amount;
+                  } else {
+                    next.dailySpending += amount;
+                    next.monthlySpending += amount;
+                    next.monthlyNet -= amount;
+                  }
+                  return next;
+                });
+              }
+            )
           }
           onUpdateExpense={(id, input) =>
-            runAction(async () => {
-              await api.updateExpense(id, input);
-            })
+            runAction(
+              "money",
+              async () => {
+                await api.updateExpense(id, input);
+              },
+              () => {
+                setMoney((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        recentExpenses: prev.recentExpenses.map((item) =>
+                          item.id === id ? { ...item, ...input, kind: input.kind ?? item.kind } : item
+                        )
+                      }
+                    : prev
+                );
+              }
+            )
           }
           onDeleteExpense={(id) =>
-            runAction(async () => {
-              await api.deleteExpense(id);
-            })
+            runAction(
+              "money",
+              async () => {
+                await api.deleteExpense(id);
+              },
+              () => {
+                setMoney((prev) =>
+                  prev ? { ...prev, recentExpenses: prev.recentExpenses.filter((item) => item.id !== id) } : prev
+                );
+              }
+            )
           }
         />
       ) : null}
@@ -188,15 +292,20 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
       {!loading && active === "growth" && habits && reality ? (
         <GrowthPanel
           api={api}
-          busy={busy}
+          busy={sectionBusy.growth}
           decisions={decisions}
           growthView={growthView}
           habits={habits}
           reality={reality}
           setGrowthView={setGrowthView}
-          refresh={refresh}
+          refresh={() => refresh(true)}
           setError={setError}
-          setBusy={setBusy}
+          setBusy={(value) =>
+            setSectionBusy((prev) => ({
+              ...prev,
+              growth: typeof value === "function" ? value(prev.growth) : value
+            }))
+          }
         />
       ) : null}
 
@@ -204,7 +313,7 @@ export function AppShell({ displayName, getToken, onSignOut }: AppShellProps) {
 
       {focusTask ? (
         <FocusMode
-          busy={busy}
+          busy={sectionBusy.today}
           task={focusTask}
           onClose={() => setFocusTask(null)}
           onComplete={() => handleComplete(focusTask)}

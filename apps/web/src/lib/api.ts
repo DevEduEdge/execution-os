@@ -10,11 +10,36 @@ import type {
 } from "@execution-os/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+const REQUEST_TIMEOUT_MS = 12000;
+const MAX_RETRIES = 1;
 
 type TokenProvider = () => Promise<string | null>;
 
 export class ApiClient {
   constructor(private readonly getToken: TokenProvider) {}
+
+  private async fetchWithRetry(url: string, init: RequestInit) {
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, {
+          ...init,
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        return response;
+      } catch (error) {
+        clearTimeout(timeout);
+        lastError = error;
+        if (attempt === MAX_RETRIES) break;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("Network request failed.");
+  }
 
   private async request<T>(path: string, init: RequestInit = {}) {
     const token = await this.getToken();
@@ -25,10 +50,7 @@ export class ApiClient {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
-    const response = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers
-    });
+    const response = await this.fetchWithRetry(`${API_URL}${path}`, { ...init, headers });
 
     const payload = (await response.json().catch(() => ({}))) as ApiEnvelope<T> & {
       error?: string;
