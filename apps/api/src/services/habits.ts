@@ -1,4 +1,4 @@
-import type { HabitSummaryDto } from "@execution-os/shared";
+import type { HabitSummaryDto } from "../contracts.js";
 import type { UserDocument } from "../models/index.js";
 import { Habit, HabitLog } from "../models/index.js";
 import { dateKey, weekStart } from "../utils/date.js";

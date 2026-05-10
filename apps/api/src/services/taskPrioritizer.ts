@@ -1,4 +1,4 @@
-import type { TaskCategory } from "@execution-os/shared";
+import type { TaskCategory } from "../contracts.js";
 import type { TaskDocument, UserDocument } from "../models/index.js";
 import { Task } from "../models/index.js";
 import { endOfToday } from "../utils/date.js";

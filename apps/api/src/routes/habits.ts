@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { HABIT_LIMIT } from "@execution-os/shared";
+import { HABIT_LIMIT } from "../contracts.js";
 import { Habit, HabitLog } from "../models/index.js";
 import { AppError } from "../middleware/error.js";
 import { getHabitSummary } from "../services/habits.js";

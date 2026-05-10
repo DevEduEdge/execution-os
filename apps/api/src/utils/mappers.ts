@@ -5,7 +5,7 @@ import type {
   RealityDashboardDto,
   TaskDto,
   UserProfile
-} from "@execution-os/shared";
+} from "../contracts.js";
 import type {
   DecisionDocument,
   ExpenseDocument,

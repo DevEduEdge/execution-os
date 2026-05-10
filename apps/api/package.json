@@ -5,16 +5,13 @@
   "type": "module",
   "main": "dist/src/server.js",
   "scripts": {
-    "predev": "npm run build -w @execution-os/shared",
     "dev": "tsx watch src/server.ts",
-    "prebuild": "npm run build -w @execution-os/shared",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@execution-os/shared": "file:../../packages/shared",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.18.3",

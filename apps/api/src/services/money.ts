@@ -1,4 +1,4 @@
-import type { MoneySummaryDto } from "@execution-os/shared";
+import type { MoneySummaryDto } from "../contracts.js";
 import type { UserDocument } from "../models/index.js";
 import { Expense } from "../models/index.js";
 import { dayOfMonth, daysInCurrentMonth, endOfToday, startOfMonth, startOfToday } from "../utils/date.js";

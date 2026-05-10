@@ -1,4 +1,4 @@
-import { TASK_CATEGORIES, type TaskCategory, type TaskStatus } from "@execution-os/shared";
+import { TASK_CATEGORIES, type TaskCategory, type TaskStatus } from "../contracts.js";
 import mongoose, { Schema, model, type HydratedDocument, type Model, type Types } from "mongoose";
 
 export interface TaskAttrs {
