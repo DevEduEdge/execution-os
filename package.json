@@ -1,0 +1,31 @@
+{
+  "name": "execution-os",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Execution OS - a mobile-first execution system for focused daily action.",
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "predev": "npm run build -w @execution-os/shared",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev -w @execution-os/api\" \"npm run dev -w @execution-os/web\"",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "pretypecheck": "npm run build -w @execution-os/shared",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "dependencies": {
+    "firebase": "^12.13.0",
+    "mongodb": "^7.2.0"
+  }
+}
