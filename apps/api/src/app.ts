@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import mongoose from "mongoose";
 import morgan from "morgan";
 import { env } from "./config/env.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -25,6 +26,22 @@ app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "execution-os-api" });
+});
+
+app.get("/health/db", (_req, res) => {
+  const stateMap: Record<number, string> = {
+    0: "disconnected",
+    1: "connected",
+    2: "connecting",
+    3: "disconnecting"
+  };
+  const readyState = mongoose.connection.readyState;
+
+  res.json({
+    ok: readyState === 1,
+    service: "execution-os-api",
+    dbState: stateMap[readyState] ?? "unknown"
+  });
 });
 
 app.use("/api/auth", requireAuth, authRouter);
